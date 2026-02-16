@@ -24,3 +24,6 @@ dist-ssr
 *.sw?
 public/videos/
 .vercel
+
+0215-optimized/
+0215/

@@ -50,12 +50,12 @@ export function PhotoBooth({ memberId, onPhotoTaken }: PhotoBoothProps) {
     fetchPhotos()
   }, [memberId])
 
-  // Set srcObject when stream changes and video element is available
+  // Set srcObject when stream changes, video element is available, or after retake
   useEffect(() => {
-    if (stream && videoRef.current) {
+    if (stream && videoRef.current && !capturedImage) {
       videoRef.current.srcObject = stream
     }
-  }, [stream, isCameraOn])
+  }, [stream, isCameraOn, capturedImage])
 
   // Cleanup stream on unmount
   useEffect(() => {
