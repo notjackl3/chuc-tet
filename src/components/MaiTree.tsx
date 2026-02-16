@@ -26,6 +26,64 @@ const edgeTypes = {
   flowerEdge: FlowerEdge,
 }
 
+// Seeded random for consistent layout
+function seededRandom(seed: string) {
+  let hash = 0
+  for (let i = 0; i < seed.length; i++) {
+    hash = ((hash << 5) - hash) + seed.charCodeAt(i)
+    hash |= 0
+  }
+  return () => {
+    hash = (hash * 1103515245 + 12345) & 0x7fffffff
+    return hash / 0x7fffffff
+  }
+}
+
+const NODE_SIZE = 80 // Coin size
+const MIN_DISTANCE = NODE_SIZE + 20 // Minimum distance between node centers
+
+function checkCollision(pos1: { x: number; y: number }, pos2: { x: number; y: number }): boolean {
+  const dx = pos1.x - pos2.x
+  const dy = pos1.y - pos2.y
+  const distance = Math.sqrt(dx * dx + dy * dy)
+  return distance < MIN_DISTANCE
+}
+
+function resolveCollisions(nodes: Node[]): Node[] {
+  const resolvedNodes = nodes.map(n => ({ ...n, position: { ...n.position } }))
+  const maxIterations = 50
+
+  for (let iteration = 0; iteration < maxIterations; iteration++) {
+    let hasCollision = false
+
+    for (let i = 0; i < resolvedNodes.length; i++) {
+      for (let j = i + 1; j < resolvedNodes.length; j++) {
+        const nodeA = resolvedNodes[i]
+        const nodeB = resolvedNodes[j]
+
+        if (checkCollision(nodeA.position, nodeB.position)) {
+          hasCollision = true
+
+          // Move the node that's lower in the tree (higher index usually means child)
+          const nodeToMove = j > i ? nodeB : nodeA
+          const random = seededRandom(nodeToMove.id + iteration)
+
+          // Try moving in different directions
+          const moveX = (random() - 0.5) * 60
+          const moveY = random() * 40 + 20 // Bias towards moving down
+
+          nodeToMove.position.x += moveX
+          nodeToMove.position.y += moveY
+        }
+      }
+    }
+
+    if (!hasCollision) break
+  }
+
+  return resolvedNodes
+}
+
 function buildTreeLayout(members: Member[]): { nodes: Node[]; edges: Edge[] } {
   const nodes: Node[] = []
   const edges: Edge[] = []
@@ -43,9 +101,9 @@ function buildTreeLayout(members: Member[]): { nodes: Node[]; edges: Edge[] } {
     }
   })
 
-  // Layout constants - more vertical layout
-  const VERTICAL_SPACING = 140
-  const HORIZONTAL_SPACING = 120
+  // Layout constants
+  const VERTICAL_SPACING = 130
+  const HORIZONTAL_SPACING = 110
 
   // Process nodes level by level
   function processLevel(levelMembers: Member[], y: number, centerX: number) {
@@ -53,12 +111,18 @@ function buildTreeLayout(members: Member[]): { nodes: Node[]; edges: Edge[] } {
     const startX = centerX - totalWidth / 2
 
     levelMembers.forEach((member, index) => {
-      const x = startX + index * HORIZONTAL_SPACING
+      // Add slight randomness to positions
+      const random = seededRandom(member.id)
+      const randomOffsetX = (random() - 0.5) * 30
+      const randomOffsetY = (random() - 0.5) * 20
+
+      const x = startX + index * HORIZONTAL_SPACING + randomOffsetX
+      const yPos = y + randomOffsetY
 
       nodes.push({
         id: member.id,
         type: 'maiNode',
-        position: { x, y },
+        position: { x, y: yPos },
         data: { member, onClick: () => {} },
       })
 
@@ -75,7 +139,7 @@ function buildTreeLayout(members: Member[]): { nodes: Node[]; edges: Edge[] } {
       // Process children
       const children = childrenMap.get(member.id) || []
       if (children.length > 0) {
-        processLevel(children, y + VERTICAL_SPACING, x)
+        processLevel(children, yPos + VERTICAL_SPACING, x)
       }
     })
   }
@@ -84,7 +148,10 @@ function buildTreeLayout(members: Member[]): { nodes: Node[]; edges: Edge[] } {
   const centerX = 400
   processLevel(rootMembers, 50, centerX)
 
-  return { nodes, edges }
+  // Resolve any collisions
+  const resolvedNodes = resolveCollisions(nodes)
+
+  return { nodes: resolvedNodes, edges }
 }
 
 export function MaiTree({ members, onNodeClick }: MaiTreeProps) {
@@ -116,8 +183,8 @@ export function MaiTree({ members, onNodeClick }: MaiTreeProps) {
         edgeTypes={edgeTypes}
         connectionMode={ConnectionMode.Loose}
         fitView
-        fitViewOptions={{ padding: 0.3 }}
-        minZoom={0.3}
+        fitViewOptions={{ padding: 0.5, maxZoom: 0.8 }}
+        minZoom={0.2}
         maxZoom={2}
         defaultEdgeOptions={{
           type: 'flowerEdge',
