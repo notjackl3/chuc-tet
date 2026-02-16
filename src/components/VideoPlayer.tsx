@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { useVideoLoadState } from '../hooks/useVideoPreload'
 import { getVideoUrl } from '../lib/video'
 
 interface VideoPlayerProps {
@@ -8,11 +7,11 @@ interface VideoPlayerProps {
 }
 
 function VideoContent({ filename }: { filename: string }) {
-  const isPreloaded = useVideoLoadState(filename)
   const [isVideoReady, setIsVideoReady] = useState(false)
+  const [hasError, setHasError] = useState(false)
 
   const videoUrl = getVideoUrl(filename)
-  const showLoading = !isPreloaded || !isVideoReady
+  const showLoading = !isVideoReady && !hasError
 
   return (
     <div className="w-full h-full relative">
@@ -32,6 +31,7 @@ function VideoContent({ filename }: { filename: string }) {
         src={videoUrl}
         onCanPlay={() => setIsVideoReady(true)}
         onLoadedData={() => setIsVideoReady(true)}
+        onError={() => setHasError(true)}
       >
         Your browser does not support the video tag.
       </video>

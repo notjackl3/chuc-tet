@@ -2,12 +2,10 @@ import { useState, useCallback } from 'react'
 import { MaiTree } from './components/MaiTree'
 import { MemberModal } from './components/MemberModal'
 import { useMembers } from './hooks/useMembers'
-import { useVideoPreload } from './hooks/useVideoPreload'
 import type { Member } from './types'
 
 function App() {
   const { members, loading, isDemo } = useMembers()
-  const { loadingProgress, isPreloading } = useVideoPreload(members)
   const [selectedMember, setSelectedMember] = useState<Member | null>(null)
 
   const handleNodeClick = useCallback((member: Member) => {
@@ -24,17 +22,6 @@ function App() {
         <div className="text-center">
           <div className="animate-spin rounded-full h-16 w-16 border-4 border-yellow-400 border-t-transparent mx-auto mb-4" />
           <p className="text-white text-lg">Loading...</p>
-        </div>
-      </div>
-    )
-  }
-
-  if (isPreloading) {
-    return (
-      <div className="w-full h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-4 border-yellow-400 border-t-transparent mx-auto mb-4" />
-          <p className="text-white text-lg">Loading videos... {loadingProgress}%</p>
         </div>
       </div>
     )
