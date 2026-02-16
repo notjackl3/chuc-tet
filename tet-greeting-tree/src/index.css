@@ -1,0 +1,37 @@
+@import "tailwindcss";
+
+@theme {
+  /* Tet Colors - solid */
+  --color-tet-red: #C41E3A;
+  --color-tet-gold: #FFD700;
+}
+
+* {
+  margin: 0;
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+}
+
+body {
+  background: #B91C1C;
+}
+
+/* React Flow custom styles */
+.react-flow__node {
+  cursor: pointer;
+}
+
+.react-flow__edge-path {
+  stroke: #FFD700;
+  stroke-width: 1.5;
+}
+
+/* Coin hover animation */
+.lucky-coin:hover {
+  filter: drop-shadow(0 0 12px rgba(255, 215, 0, 0.8));
+}
