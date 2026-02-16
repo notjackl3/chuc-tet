@@ -124,6 +124,10 @@ export function PhotoBooth({ memberId, onPhotoTaken }: PhotoBoothProps) {
 
     canvas.width = video.videoWidth
     canvas.height = video.videoHeight
+
+    // Mirror the canvas to match the mirrored preview
+    ctx.translate(canvas.width, 0)
+    ctx.scale(-1, 1)
     ctx.drawImage(video, 0, 0)
 
     const imageData = canvas.toDataURL('image/jpeg', 0.8)
@@ -349,7 +353,7 @@ export function PhotoBooth({ memberId, onPhotoTaken }: PhotoBoothProps) {
                   autoPlay
                   playsInline
                   muted
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-cover -scale-x-100"
                   onLoadedMetadata={() => setIsVideoReady(true)}
                 />
                 {!isVideoReady && (
