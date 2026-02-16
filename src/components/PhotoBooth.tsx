@@ -7,6 +7,12 @@ interface PhotoBoothProps {
   onPhotoTaken: () => void
 }
 
+// Helper to extract storage path from public URL
+function getStoragePathFromUrl(publicUrl: string): string | null {
+  const match = publicUrl.match(/\/photos\/(.+)$/)
+  return match ? match[1] : null
+}
+
 export function PhotoBooth({ memberId, onPhotoTaken }: PhotoBoothProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -19,6 +25,8 @@ export function PhotoBooth({ memberId, onPhotoTaken }: PhotoBoothProps) {
   const [error, setError] = useState<string | null>(null)
   const [photos, setPhotos] = useState<Photo[]>([])
   const [loadingPhotos, setLoadingPhotos] = useState(true)
+  const [expandedPhoto, setExpandedPhoto] = useState<Photo | null>(null)
+  const [deleting, setDeleting] = useState<string | null>(null)
 
   // Fetch existing photos
   useEffect(() => {
@@ -185,6 +193,57 @@ export function PhotoBooth({ memberId, onPhotoTaken }: PhotoBoothProps) {
     }
   }, [capturedImage, memberId, onPhotoTaken, stopCamera])
 
+  const deletePhoto = useCallback(async (photo: Photo, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (deleting) return
+
+    if (!confirm('Are you sure you want to delete this photo?')) return
+
+    setDeleting(photo.id)
+    try {
+      // Delete from storage
+      const storagePath = getStoragePathFromUrl(photo.photo_url)
+      if (storagePath) {
+        await supabase.storage.from('photos').remove([storagePath])
+      }
+
+      // Delete from database
+      const { error } = await supabase
+        .from('photos')
+        .delete()
+        .eq('id', photo.id)
+
+      if (error) throw error
+
+      // Update local state
+      setPhotos(prev => prev.filter(p => p.id !== photo.id))
+    } catch (err) {
+      console.error('Delete error:', err)
+      setError('Failed to delete photo. Please try again.')
+    } finally {
+      setDeleting(null)
+    }
+  }, [deleting])
+
+  const downloadPhoto = useCallback(async (photo: Photo, e: React.MouseEvent) => {
+    e.stopPropagation()
+    try {
+      const response = await fetch(photo.photo_url)
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `photo-${new Date(photo.captured_at).toISOString().split('T')[0]}.jpg`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error('Download error:', err)
+      setError('Failed to download photo.')
+    }
+  }, [])
+
   // Show loading state
   if (loadingPhotos) {
     return (
@@ -209,12 +268,41 @@ export function PhotoBooth({ memberId, onPhotoTaken }: PhotoBoothProps) {
             <div className="flex-1 overflow-y-auto p-4">
               <div className="grid grid-cols-2 gap-3">
                 {photos.map((photo) => (
-                  <div key={photo.id} className="relative group">
+                  <div
+                    key={photo.id}
+                    className="relative group cursor-pointer"
+                    onClick={() => setExpandedPhoto(photo)}
+                  >
                     <img
                       src={photo.photo_url}
                       alt={`Photo from ${new Date(photo.captured_at).toLocaleDateString()}`}
-                      className="w-full aspect-square object-cover rounded-lg shadow-md"
+                      className="w-full aspect-square object-cover rounded-lg shadow-md transition-transform group-hover:scale-[1.02]"
                     />
+                    {/* Delete button - top left */}
+                    <button
+                      onClick={(e) => deletePhoto(photo, e)}
+                      disabled={deleting === photo.id}
+                      className="absolute top-1 left-1 w-6 h-6 bg-red-500 hover:bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center shadow-md disabled:opacity-50"
+                      title="Delete photo"
+                    >
+                      {deleting === photo.id ? (
+                        <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      )}
+                    </button>
+                    {/* Download button - top right */}
+                    <button
+                      onClick={(e) => downloadPhoto(photo, e)}
+                      className="absolute top-1 right-1 w-6 h-6 bg-blue-500 hover:bg-blue-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center shadow-md"
+                      title="Download photo"
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                      </svg>
+                    </button>
                     <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-xs p-1 rounded-b-lg">
                       {new Date(photo.captured_at).toLocaleString('vi-VN', {
                         day: '2-digit',
@@ -320,6 +408,65 @@ export function PhotoBooth({ memberId, onPhotoTaken }: PhotoBoothProps) {
                 </button>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Expanded photo lightbox */}
+      {expandedPhoto && (
+        <div
+          className="fixed inset-0 bg-black/90 z-100 flex items-center justify-center p-4"
+          onClick={() => setExpandedPhoto(null)}
+        >
+          <div className="relative max-w-full max-h-full" onClick={(e) => e.stopPropagation()}>
+            <img
+              src={expandedPhoto.photo_url}
+              alt="Expanded photo"
+              className="max-w-full max-h-[85vh] object-contain rounded-lg"
+            />
+            {/* Close button */}
+            <button
+              onClick={() => setExpandedPhoto(null)}
+              className="absolute -top-3 -right-3 w-8 h-8 bg-white text-gray-800 rounded-full shadow-lg flex items-center justify-center hover:bg-gray-100"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+            {/* Action buttons */}
+            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-4">
+              <button
+                onClick={(e) => downloadPhoto(expandedPhoto, e)}
+                className="w-10 h-10 bg-blue-500/80 hover:bg-blue-600 text-white rounded-full shadow-lg flex items-center justify-center"
+                title="Download"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+              </button>
+              <button
+                onClick={(e) => {
+                  deletePhoto(expandedPhoto, e)
+                  setExpandedPhoto(null)
+                }}
+                className="w-10 h-10 bg-red-500/80 hover:bg-red-600 text-white rounded-full shadow-lg flex items-center justify-center"
+                title="Delete"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
+            </div>
+            {/* Timestamp */}
+            <div className="absolute top-4 left-4 bg-black/50 text-white text-sm px-3 py-1 rounded-lg">
+              {new Date(expandedPhoto.captured_at).toLocaleString('vi-VN', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+              })}
+            </div>
           </div>
         </div>
       )}
