@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useEffect, useRef, useCallback } from 'react'
 import {
   ReactFlow,
   Controls,
@@ -8,6 +8,14 @@ import {
   type Edge,
   ConnectionMode,
 } from '@xyflow/react'
+
+interface FloatState {
+  phase: number
+  speedX: number
+  speedY: number
+  rangeX: number
+  rangeY: number
+}
 import '@xyflow/react/dist/style.css'
 import { TreeNode } from './TreeNode'
 import { FlowerEdge } from './FlowerEdge'
@@ -149,6 +157,27 @@ export function MaiTree({ members, onNodeClick }: MaiTreeProps) {
     [members]
   )
 
+  // Store base positions and floating state for each node
+  const basePositions = useRef<Map<string, { x: number; y: number }>>(new Map())
+  const floatStates = useRef<Map<string, FloatState>>(new Map())
+
+  // Initialize base positions and float states
+  useEffect(() => {
+    initialNodes.forEach(node => {
+      basePositions.current.set(node.id, { ...node.position })
+
+      // Create unique float parameters for each node using seeded random
+      const random = seededRandom(node.id + 'float')
+      floatStates.current.set(node.id, {
+        phase: random() * Math.PI * 2, // Random starting phase
+        speedX: 0.3 + random() * 0.3,  // 0.3-0.6 speed
+        speedY: 0.25 + random() * 0.3, // 0.25-0.55 speed
+        rangeX: 8 + random() * 8,      // 8-16px range
+        rangeY: 8 + random() * 8,      // 8-16px range
+      })
+    })
+  }, [initialNodes])
+
   // Update nodes with click handler
   const nodesWithHandler = useMemo(
     () => initialNodes.map(node => ({
@@ -158,15 +187,80 @@ export function MaiTree({ members, onNodeClick }: MaiTreeProps) {
     [initialNodes, onNodeClick]
   )
 
-  const [nodes, , onNodesChange] = useNodesState(nodesWithHandler)
+  const [nodes, setNodes, onNodesChange] = useNodesState(nodesWithHandler)
   const [edges, , onEdgesChange] = useEdgesState(initialEdges)
+  const isDragging = useRef<Set<string>>(new Set())
+
+  // Custom handler to track dragging and update base positions
+  const handleNodesChange: typeof onNodesChange = useCallback((changes) => {
+    changes.forEach(change => {
+      if (change.type === 'position' && 'dragging' in change) {
+        if (change.dragging) {
+          // Started dragging
+          isDragging.current.add(change.id)
+        } else if (isDragging.current.has(change.id)) {
+          // Stopped dragging - update base position
+          isDragging.current.delete(change.id)
+          if (change.position) {
+            // Calculate current float offset and subtract it to get true base
+            const time = Date.now() / 1000
+            const floatState = floatStates.current.get(change.id)
+            if (floatState) {
+              const offsetX = Math.sin(time * floatState.speedX + floatState.phase) * floatState.rangeX
+              const offsetY = Math.sin(time * floatState.speedY + floatState.phase * 1.3) * floatState.rangeY
+              basePositions.current.set(change.id, {
+                x: change.position.x - offsetX,
+                y: change.position.y - offsetY,
+              })
+            }
+          }
+        }
+      }
+    })
+    onNodesChange(changes)
+  }, [onNodesChange])
+
+  // Animate floating positions
+  const updateFloatingPositions = useCallback(() => {
+    const time = Date.now() / 1000 // Current time in seconds
+
+    setNodes(currentNodes =>
+      currentNodes.map(node => {
+        // Skip nodes being dragged
+        if (isDragging.current.has(node.id)) return node
+
+        const basePos = basePositions.current.get(node.id)
+        const floatState = floatStates.current.get(node.id)
+
+        if (!basePos || !floatState) return node
+
+        // Calculate smooth floating offset using sine waves
+        const offsetX = Math.sin(time * floatState.speedX + floatState.phase) * floatState.rangeX
+        const offsetY = Math.sin(time * floatState.speedY + floatState.phase * 1.3) * floatState.rangeY
+
+        return {
+          ...node,
+          position: {
+            x: basePos.x + offsetX,
+            y: basePos.y + offsetY,
+          },
+        }
+      })
+    )
+  }, [setNodes])
+
+  // Set up animation loop
+  useEffect(() => {
+    const intervalId = setInterval(updateFloatingPositions, 50) // ~20fps for smooth animation
+    return () => clearInterval(intervalId)
+  }, [updateFloatingPositions])
 
   return (
     <div className="w-full h-full">
       <ReactFlow
         nodes={nodes}
         edges={edges}
-        onNodesChange={onNodesChange}
+        onNodesChange={handleNodesChange}
         onEdgesChange={onEdgesChange}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}

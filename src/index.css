@@ -35,3 +35,25 @@ body {
 .lucky-coin:hover {
   filter: drop-shadow(0 0 12px rgba(255, 215, 0, 0.8));
 }
+
+/* Falling coins animation */
+.falling-coin {
+  position: fixed;
+  top: -40px;
+  z-index: 5;
+  animation: fall-and-spin linear forwards;
+}
+
+@keyframes fall-and-spin {
+  0% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(calc(100vh + 50px)) rotate(720deg);
+    opacity: 0;
+  }
+}

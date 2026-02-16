@@ -1,9 +1,17 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { MaiTree } from './components/MaiTree'
 import { MemberModal } from './components/MemberModal'
 import { useMembers } from './hooks/useMembers'
 import { supabase } from './lib/supabase'
 import type { Member, Photo } from './types'
+
+interface FallingCoin {
+  id: number
+  x: number
+  size: number
+  duration: number
+  delay: number
+}
 
 function App() {
   const { members, loading, isDemo } = useMembers()
@@ -12,6 +20,46 @@ function App() {
   const [allPhotos, setAllPhotos] = useState<Photo[]>([])
   const [loadingPhotos, setLoadingPhotos] = useState(false)
   const [expandedPhoto, setExpandedPhoto] = useState<Photo | null>(null)
+  const [fallingCoins, setFallingCoins] = useState<FallingCoin[]>([])
+  const coinIdRef = useRef(0)
+
+  // Spawn falling coins at random intervals
+  useEffect(() => {
+    const spawnCoin = () => {
+      const newCoin: FallingCoin = {
+        id: coinIdRef.current++,
+        x: Math.random() * 100, // Random horizontal position (%)
+        size: 16 + Math.random() * 16, // 16-32px
+        duration: 4 + Math.random() * 3, // 4-7 seconds to fall
+        delay: 0,
+      }
+      setFallingCoins(prev => [...prev, newCoin])
+
+      // Remove coin after animation completes
+      setTimeout(() => {
+        setFallingCoins(prev => prev.filter(c => c.id !== newCoin.id))
+      }, newCoin.duration * 1000 + 500)
+    }
+
+    // Spawn first coin after a short delay
+    const initialTimeout = setTimeout(spawnCoin, 2000)
+
+    // Set up recurring spawn with random interval
+    const scheduleNextCoin = () => {
+      const interval = 5000 + Math.random() * 2000 // 5-7 seconds
+      return setTimeout(() => {
+        spawnCoin()
+        timeoutRef.current = scheduleNextCoin()
+      }, interval)
+    }
+
+    const timeoutRef = { current: scheduleNextCoin() }
+
+    return () => {
+      clearTimeout(initialTimeout)
+      clearTimeout(timeoutRef.current)
+    }
+  }, [])
 
   // Fetch all photos when gallery opens
   useEffect(() => {
@@ -190,6 +238,24 @@ function App() {
           Click on a lucky coin to see greetings
         </p>
       </footer>
+
+      {/* Falling Coins */}
+      {fallingCoins.map(coin => (
+        <div
+          key={coin.id}
+          className="falling-coin pointer-events-none"
+          style={{
+            left: `${coin.x}%`,
+            width: coin.size,
+            height: coin.size,
+            animationDuration: `${coin.duration}s`,
+          }}
+        >
+          <div className="w-full h-full rounded-full bg-yellow-400 border-2 border-yellow-500 shadow-lg flex items-center justify-center">
+            <div className="absolute top-1 left-1 w-2 h-2 bg-white/60 rounded-full" />
+          </div>
+        </div>
+      ))}
     </div>
   )
 }

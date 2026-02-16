@@ -49,7 +49,7 @@ export function TreeNode({ data }: TreeNodeProps) {
 
   return (
     <div
-      className="lucky-coin cursor-pointer transform transition-all duration-300 hover:scale-105 relative"
+      className="lucky-coin cursor-pointer relative"
       onClick={() => onClick(member)}
     >
       {/* Connection handles - hidden but functional */}
