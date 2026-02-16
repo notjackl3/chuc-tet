@@ -55,27 +55,67 @@ DECLARE
   root_id UUID;
   mom_id UUID;
   dad_id UUID;
+  ba_ngoai_id UUID;
+  ong_ngoai_id UUID;
+  ba_noi_id UUID;
+  ong_noi_id UUID;
 BEGIN
   SELECT id INTO root_id FROM members WHERE name = 'Me';
 
   -- Parents
   INSERT INTO members (name, relationship, category, parent_id, video_filename) VALUES
-    ('Mom', 'Mother', 'family', root_id, 'greeting-mom.mp4')
+    ('Mẹ', 'Mother', 'family', root_id, 'greeting-mom.mp4')
   RETURNING id INTO mom_id;
 
   INSERT INTO members (name, relationship, category, parent_id, video_filename) VALUES
-    ('Dad', 'Father', 'family', root_id, 'greeting-dad.mp4')
+    ('Ba', 'Father', 'family', root_id, 'greeting-dad.mp4')
   RETURNING id INTO dad_id;
 
-  -- Grandparents
+  -- Grandparents (Maternal - Ngoại)
   INSERT INTO members (name, relationship, category, parent_id, video_filename) VALUES
-    ('Grandma (Maternal)', 'Grandmother', 'family', mom_id, 'greeting-grandma-maternal.mp4'),
-    ('Grandpa (Maternal)', 'Grandfather', 'family', mom_id, 'greeting-grandpa-maternal.mp4'),
-    ('Grandma (Paternal)', 'Grandmother', 'family', dad_id, 'greeting-grandma-paternal.mp4'),
-    ('Grandpa (Paternal)', 'Grandfather', 'family', dad_id, 'greeting-grandpa-paternal.mp4');
+    ('Bà Ngoại', 'Grandmother', 'family', mom_id, 'greeting-grandma-maternal.mp4')
+  RETURNING id INTO ba_ngoai_id;
 
-  -- Friends and community (separate branches from root)
   INSERT INTO members (name, relationship, category, parent_id, video_filename) VALUES
-    ('Close Friends', 'Friends', 'friends', root_id, 'greeting-friends.mp4'),
-    ('Work Team', 'Community', 'community', root_id, 'greeting-work.mp4');
+    ('Ông Ngoại', 'Grandfather', 'family', mom_id, 'greeting-grandpa-maternal.mp4')
+  RETURNING id INTO ong_ngoai_id;
+
+  -- Grandparents (Paternal - Nội)
+  INSERT INTO members (name, relationship, category, parent_id, video_filename) VALUES
+    ('Bà Nội', 'Grandmother', 'family', dad_id, NULL)
+  RETURNING id INTO ba_noi_id;
+
+  INSERT INTO members (name, relationship, category, parent_id, video_filename) VALUES
+    ('Ông Nội', 'Grandfather', 'family', dad_id, NULL)
+  RETURNING id INTO ong_noi_id;
+
+  -- Below Me
+  INSERT INTO members (name, relationship, category, parent_id, video_filename) VALUES
+    ('Lớp Vào Đời', 'Community', 'community', root_id, NULL);
+
+  -- Below Mẹ
+  INSERT INTO members (name, relationship, category, parent_id, video_filename) VALUES
+    ('Cậu Hai', 'Uncle', 'family', mom_id, NULL),
+    ('Cô Ngọc', 'Aunt', 'family', mom_id, NULL),
+    ('Nhi', 'Cousin', 'family', mom_id, NULL),
+    ('Khôi', 'Cousin', 'family', mom_id, NULL);
+
+  -- Below Ông Ngoại
+  INSERT INTO members (name, relationship, category, parent_id, video_filename) VALUES
+    ('Gia đình bác Trí', 'Extended Family', 'family', ong_ngoai_id, NULL);
+
+  -- Below Ba
+  INSERT INTO members (name, relationship, category, parent_id, video_filename) VALUES
+    ('Cô Nga', 'Aunt', 'family', dad_id, NULL);
+
+  -- Below Ông Nội
+  INSERT INTO members (name, relationship, category, parent_id, video_filename) VALUES
+    ('Bà Hồng', 'Extended Family', 'family', ong_noi_id, NULL);
+
+  -- Below Bà Nội
+  INSERT INTO members (name, relationship, category, parent_id, video_filename) VALUES
+    ('Bà Trà', 'Extended Family', 'family', ba_noi_id, NULL),
+    ('Gia đình bà Trinh', 'Extended Family', 'family', ba_noi_id, NULL),
+    ('Gia đình bà Nhàn', 'Extended Family', 'family', ba_noi_id, NULL),
+    ('Gia đình bà Ngân', 'Extended Family', 'family', ba_noi_id, NULL);
 END $$;

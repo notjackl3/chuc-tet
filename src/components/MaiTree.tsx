@@ -39,51 +39,6 @@ function seededRandom(seed: string) {
   }
 }
 
-const NODE_SIZE = 80 // Coin size
-const MIN_DISTANCE = NODE_SIZE + 20 // Minimum distance between node centers
-
-function checkCollision(pos1: { x: number; y: number }, pos2: { x: number; y: number }): boolean {
-  const dx = pos1.x - pos2.x
-  const dy = pos1.y - pos2.y
-  const distance = Math.sqrt(dx * dx + dy * dy)
-  return distance < MIN_DISTANCE
-}
-
-function resolveCollisions(nodes: Node[]): Node[] {
-  const resolvedNodes = nodes.map(n => ({ ...n, position: { ...n.position } }))
-  const maxIterations = 50
-
-  for (let iteration = 0; iteration < maxIterations; iteration++) {
-    let hasCollision = false
-
-    for (let i = 0; i < resolvedNodes.length; i++) {
-      for (let j = i + 1; j < resolvedNodes.length; j++) {
-        const nodeA = resolvedNodes[i]
-        const nodeB = resolvedNodes[j]
-
-        if (checkCollision(nodeA.position, nodeB.position)) {
-          hasCollision = true
-
-          // Move the node that's lower in the tree (higher index usually means child)
-          const nodeToMove = j > i ? nodeB : nodeA
-          const random = seededRandom(nodeToMove.id + iteration)
-
-          // Try moving in different directions
-          const moveX = (random() - 0.5) * 60
-          const moveY = random() * 40 + 20 // Bias towards moving down
-
-          nodeToMove.position.x += moveX
-          nodeToMove.position.y += moveY
-        }
-      }
-    }
-
-    if (!hasCollision) break
-  }
-
-  return resolvedNodes
-}
-
 function buildTreeLayout(members: Member[]): { nodes: Node[]; edges: Edge[] } {
   const nodes: Node[] = []
   const edges: Edge[] = []
@@ -102,56 +57,90 @@ function buildTreeLayout(members: Member[]): { nodes: Node[]; edges: Edge[] } {
   })
 
   // Layout constants
-  const VERTICAL_SPACING = 130
-  const HORIZONTAL_SPACING = 110
+  const VERTICAL_SPACING = 140
+  const HORIZONTAL_SPACING = 70
+  const NODE_WIDTH = 85
 
-  // Process nodes level by level
-  function processLevel(levelMembers: Member[], y: number, centerX: number) {
-    const totalWidth = (levelMembers.length - 1) * HORIZONTAL_SPACING
-    const startX = centerX - totalWidth / 2
+  // Calculate the width needed for each subtree
+  const subtreeWidths = new Map<string, number>()
 
-    levelMembers.forEach((member, index) => {
-      // Add slight randomness to positions
-      const random = seededRandom(member.id)
-      const randomOffsetX = (random() - 0.5) * 30
-      const randomOffsetY = (random() - 0.5) * 20
+  function calculateSubtreeWidth(member: Member): number {
+    const children = childrenMap.get(member.id) || []
+    if (children.length === 0) {
+      subtreeWidths.set(member.id, NODE_WIDTH)
+      return NODE_WIDTH
+    }
 
-      const x = startX + index * HORIZONTAL_SPACING + randomOffsetX
-      const yPos = y + randomOffsetY
+    const childrenWidth = children.reduce((sum, child) => {
+      return sum + calculateSubtreeWidth(child)
+    }, 0) + (children.length - 1) * HORIZONTAL_SPACING
 
-      nodes.push({
-        id: member.id,
-        type: 'maiNode',
-        position: { x, y: yPos },
-        data: { member, onClick: () => {} },
-      })
-
-      // Create edge to parent
-      if (member.parent_id) {
-        edges.push({
-          id: `${member.parent_id}-${member.id}`,
-          source: member.parent_id,
-          target: member.id,
-          type: 'flowerEdge',
-        })
-      }
-
-      // Process children
-      const children = childrenMap.get(member.id) || []
-      if (children.length > 0) {
-        processLevel(children, yPos + VERTICAL_SPACING, x)
-      }
-    })
+    const width = Math.max(NODE_WIDTH, childrenWidth)
+    subtreeWidths.set(member.id, width)
+    return width
   }
 
-  // Start processing from root - centered layout
-  const centerX = 400
-  processLevel(rootMembers, 50, centerX)
+  // Calculate widths for all root subtrees
+  rootMembers.forEach(root => calculateSubtreeWidth(root))
 
-  // Resolve any collisions
-  const resolvedNodes = resolveCollisions(nodes)
+  // Position nodes based on subtree widths
+  function positionNode(member: Member, x: number, y: number) {
+    // Add slight randomness to positions for organic feel
+    const random = seededRandom(member.id)
+    const randomOffsetX = (random() - 0.5) * 15
+    const randomOffsetY = (random() - 0.5) * 10
 
-  return { nodes: resolvedNodes, edges }
+    nodes.push({
+      id: member.id,
+      type: 'maiNode',
+      position: { x: x + randomOffsetX, y: y + randomOffsetY },
+      data: { member, onClick: () => {} },
+    })
+
+    // Create edge to parent
+    if (member.parent_id) {
+      edges.push({
+        id: `${member.parent_id}-${member.id}`,
+        source: member.parent_id,
+        target: member.id,
+        type: 'flowerEdge',
+      })
+    }
+
+    // Position children
+    const children = childrenMap.get(member.id) || []
+    if (children.length > 0) {
+      // Calculate total width needed for children
+      const totalChildrenWidth = children.reduce((sum, child) => {
+        return sum + (subtreeWidths.get(child.id) || NODE_WIDTH)
+      }, 0) + (children.length - 1) * HORIZONTAL_SPACING
+
+      // Start position for first child (centered under parent)
+      let childX = x - totalChildrenWidth / 2
+
+      children.forEach(child => {
+        const childWidth = subtreeWidths.get(child.id) || NODE_WIDTH
+        // Position child at center of its subtree space
+        positionNode(child, childX + childWidth / 2, y + VERTICAL_SPACING)
+        childX += childWidth + HORIZONTAL_SPACING
+      })
+    }
+  }
+
+  // Calculate total width for all roots
+  const totalRootWidth = rootMembers.reduce((sum, root) => {
+    return sum + (subtreeWidths.get(root.id) || NODE_WIDTH)
+  }, 0) + (rootMembers.length - 1) * HORIZONTAL_SPACING
+
+  // Position root nodes
+  let rootX = 400 - totalRootWidth / 2
+  rootMembers.forEach(root => {
+    const rootWidth = subtreeWidths.get(root.id) || NODE_WIDTH
+    positionNode(root, rootX + rootWidth / 2, 50)
+    rootX += rootWidth + HORIZONTAL_SPACING
+  })
+
+  return { nodes, edges }
 }
 
 export function MaiTree({ members, onNodeClick }: MaiTreeProps) {

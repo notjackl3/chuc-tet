@@ -2,7 +2,6 @@ import { useEffect, useState, useCallback } from 'react'
 import type { Member, Photo } from '../types'
 import { VideoPlayer } from './VideoPlayer'
 import { PhotoBooth } from './PhotoBooth'
-import { PhotoGallery } from './PhotoGallery'
 import { supabase } from '../lib/supabase'
 
 interface MemberModalProps {
@@ -15,10 +14,8 @@ export function MemberModal({ member, onClose }: MemberModalProps) {
   const [showContent, setShowContent] = useState(false)
   const [activeTab, setActiveTab] = useState<'video' | 'photos'>('video')
   const [photos, setPhotos] = useState<Photo[]>([])
-  const [loadingPhotos, setLoadingPhotos] = useState(true)
 
   const fetchPhotos = useCallback(async () => {
-    setLoadingPhotos(true)
     try {
       const { data, error } = await supabase
         .from('photos')
@@ -30,8 +27,6 @@ export function MemberModal({ member, onClose }: MemberModalProps) {
       setPhotos(data || [])
     } catch (err) {
       console.error('Error fetching photos:', err)
-    } finally {
-      setLoadingPhotos(false)
     }
   }, [member.id])
 
@@ -98,11 +93,6 @@ export function MemberModal({ member, onClose }: MemberModalProps) {
                 <h2 className="text-yellow-400 font-bold text-2xl sm:text-3xl md:text-4xl mb-2">
                   {member.name}
                 </h2>
-                {member.relationship && (
-                  <p className="text-yellow-300 text-sm sm:text-base md:text-lg">
-                    {member.relationship}
-                  </p>
-                )}
               </div>
 
               {/* Bottom decoration */}
