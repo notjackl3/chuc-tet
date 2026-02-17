@@ -7,6 +7,8 @@ interface PhotoBoothProps {
   onPhotoTaken: () => void
 }
 
+type FacingMode = 'user' | 'environment'
+
 // Helper to extract storage path from public URL
 function getStoragePathFromUrl(publicUrl: string): string | null {
   const match = publicUrl.match(/\/photos\/(.+)$/)
@@ -21,6 +23,7 @@ export function PhotoBooth({ memberId, onPhotoTaken }: PhotoBoothProps) {
   const [isVideoReady, setIsVideoReady] = useState(false)
   const [isCapturing, setIsCapturing] = useState(false)
   const [capturedImage, setCapturedImage] = useState<string | null>(null)
+  const [facingMode, setFacingMode] = useState<FacingMode>('user')
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [photos, setPhotos] = useState<Photo[]>([])
@@ -66,10 +69,15 @@ export function PhotoBooth({ memberId, onPhotoTaken }: PhotoBoothProps) {
     }
   }, [stream])
 
-  const startCamera = useCallback(async () => {
+  const startCamera = useCallback(async (mode: FacingMode = facingMode) => {
     try {
       setError(null)
       setIsVideoReady(false)
+
+      // Stop existing stream if any
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop())
+      }
 
       // Check if getUserMedia is supported
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -78,11 +86,12 @@ export function PhotoBooth({ memberId, onPhotoTaken }: PhotoBoothProps) {
       }
 
       const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user', width: { ideal: 1080 }, height: { ideal: 1920 } },
+        video: { facingMode: mode, width: { ideal: 1080 }, height: { ideal: 1920 } },
         audio: false,
       })
       setStream(mediaStream)
       setIsCameraOn(true)
+      setFacingMode(mode)
     } catch (err: unknown) {
       const error = err as Error & { name?: string }
       console.error('Camera error:', error)
@@ -100,7 +109,7 @@ export function PhotoBooth({ memberId, onPhotoTaken }: PhotoBoothProps) {
         setError(`Could not access camera: ${error.message || 'Unknown error'}`)
       }
     }
-  }, [])
+  }, [facingMode, stream])
 
   const stopCamera = useCallback(() => {
     if (stream) {
@@ -111,6 +120,11 @@ export function PhotoBooth({ memberId, onPhotoTaken }: PhotoBoothProps) {
     setIsVideoReady(false)
     setCapturedImage(null)
   }, [stream])
+
+  const switchCamera = useCallback(() => {
+    const newMode: FacingMode = facingMode === 'user' ? 'environment' : 'user'
+    startCamera(newMode)
+  }, [facingMode, startCamera])
 
   const capturePhoto = useCallback(() => {
     if (!videoRef.current || !canvasRef.current) return
@@ -125,15 +139,17 @@ export function PhotoBooth({ memberId, onPhotoTaken }: PhotoBoothProps) {
     canvas.width = video.videoWidth
     canvas.height = video.videoHeight
 
-    // Mirror the canvas to match the mirrored preview
-    ctx.translate(canvas.width, 0)
-    ctx.scale(-1, 1)
+    // Only mirror for front camera (user facing) to match the mirrored preview
+    if (facingMode === 'user') {
+      ctx.translate(canvas.width, 0)
+      ctx.scale(-1, 1)
+    }
     ctx.drawImage(video, 0, 0)
 
     const imageData = canvas.toDataURL('image/jpeg', 0.8)
     setCapturedImage(imageData)
     setIsCapturing(false)
-  }, [])
+  }, [facingMode])
 
   const retakePhoto = useCallback(() => {
     setCapturedImage(null)
@@ -321,7 +337,7 @@ export function PhotoBooth({ memberId, onPhotoTaken }: PhotoBoothProps) {
               </div>
             </div>
             <button
-              onClick={startCamera}
+              onClick={() => startCamera()}
               className="shrink-0 w-full py-4 px-4 bg-yellow-500 hover:bg-yellow-600 text-gray-800 font-semibold transition-colors flex items-center justify-center gap-2 text-lg"
             >
               <span>Capture More</span>
@@ -330,7 +346,7 @@ export function PhotoBooth({ memberId, onPhotoTaken }: PhotoBoothProps) {
         ) : (
           // No photos - show "Take a Photo" button
           <button
-            onClick={startCamera}
+            onClick={() => startCamera()}
             className="w-full flex-1 py-10 px-4 bg-white text-gray-800 font-semibold shadow-md transition-colors flex items-center justify-center gap-2 text-lg"
           >
             <span>Take a Photo</span>
@@ -353,7 +369,7 @@ export function PhotoBooth({ memberId, onPhotoTaken }: PhotoBoothProps) {
                   autoPlay
                   playsInline
                   muted
-                  className="w-full h-full object-cover -scale-x-100"
+                  className={`w-full h-full object-cover ${facingMode === 'user' ? '-scale-x-100' : ''}`}
                   onLoadedMetadata={() => setIsVideoReady(true)}
                 />
                 {!isVideoReady && (
@@ -363,6 +379,18 @@ export function PhotoBooth({ memberId, onPhotoTaken }: PhotoBoothProps) {
                       <p>Starting camera...</p>
                     </div>
                   </div>
+                )}
+                {/* Camera switch button */}
+                {isVideoReady && (
+                  <button
+                    onClick={switchCamera}
+                    className="absolute top-3 right-3 w-10 h-10 bg-black/50 hover:bg-black/70 text-white rounded-full flex items-center justify-center transition-colors"
+                    title={facingMode === 'user' ? 'Switch to back camera' : 'Switch to front camera'}
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                  </button>
                 )}
               </>
             )}
