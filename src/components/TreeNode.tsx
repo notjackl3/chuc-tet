@@ -90,7 +90,7 @@ export function TreeNode({ data }: TreeNodeProps) {
         {/* White highlight on corner */}
         <div className="absolute top-2 left-2 w-5 h-5 bg-white/60 rounded-full" />
         {/* Name inside coin */}
-        <span className="text-xs font-bold text-red-700 text-center px-1 leading-tight z-10">
+        <span className="text-[9px] sm:text-xs font-bold text-red-700 text-center px-1 leading-tight z-10">
           {member.name}
         </span>
       </div>

@@ -96,9 +96,12 @@ export function MemberModal({ member, onClose }: MemberModalProps) {
               </div>
 
               {/* Bottom decoration */}
-              <div className="absolute bottom-8 sm:bottom-12 left-1/2 -translate-x-1/2">
-                <div className="text-yellow-400 text-xs sm:text-sm font-medium">
-                  Chúc Mừng Năm Mới
+              <div className="absolute bottom-8 sm:bottom-12 left-1/2 -translate-x-1/2 text-center">
+                <div className="text-yellow-400 text-lg sm:text-xl md:text-2xl font-medium">
+                  Chúc Mừng
+                </div>
+                <div className="text-yellow-400 text-lg sm:text-xl md:text-2xl font-medium">
+                  Năm Mới
                 </div>
               </div>
             </div>
