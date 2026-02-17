@@ -286,7 +286,7 @@ function App() {
       )}
 
       {/* Interactive Tree */}
-      <div className="relative z-10 h-full">
+      <div className="absolute inset-0 top-14 bottom-12 z-10">
         <MaiTree members={members} onNodeClick={handleNodeClick} />
       </div>
 
@@ -296,8 +296,8 @@ function App() {
       )}
 
       {/* Footer */}
-      <footer className="absolute bottom-0 left-0 right-0 p-4 text-center pointer-events-none z-20">
-        <p className="text-yellow-300/90 text-sm font-medium">
+      <footer className="absolute bottom-0 left-0 right-0 p-4 text-center pointer-events-none z-30">
+        <p className="text-yellow-300/90 text-sm font-medium drop-shadow-lg">
           Click on a lucky coin to see greetings
         </p>
       </footer>
