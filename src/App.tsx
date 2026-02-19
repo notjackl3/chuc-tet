@@ -20,6 +20,9 @@ function App() {
   const [allPhotos, setAllPhotos] = useState<Photo[]>([])
   const [loadingPhotos, setLoadingPhotos] = useState(false)
   const [expandedPhoto, setExpandedPhoto] = useState<Photo | null>(null)
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  const [deletingPhoto, setDeletingPhoto] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [fallingCoins, setFallingCoins] = useState<FallingCoin[]>([])
   const coinIdRef = useRef(0)
 
@@ -131,6 +134,122 @@ function App() {
     }
   }
 
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file')
+      return
+    }
+
+    // Validate file size (max 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      alert('File size must be less than 10MB')
+      return
+    }
+
+    setUploadingPhoto(true)
+    try {
+      // Generate unique filename
+      const timestamp = Date.now()
+      const filename = `uploads/${timestamp}-${file.name}`
+
+      // Upload to Supabase Storage
+      const { error: uploadError } = await supabase.storage
+        .from('photos')
+        .upload(filename, file, {
+          contentType: file.type,
+          upsert: false,
+        })
+
+      if (uploadError) throw uploadError
+
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from('photos')
+        .getPublicUrl(filename)
+
+      // Save to photos table - use a placeholder member_id for general uploads
+      // You might want to add member selection UI later
+      const { error: insertError } = await supabase
+        .from('photos')
+        .insert({
+          member_id: members[0]?.id || 'general', // Using first member as default
+          photo_url: urlData.publicUrl,
+        })
+
+      if (insertError) throw insertError
+
+      // Refresh photos list
+      await fetchAllPhotos()
+    } catch (err) {
+      console.error('Upload error:', err)
+      alert('Failed to upload photo. Please try again.')
+    } finally {
+      setUploadingPhoto(false)
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+    }
+  }
+
+  const handleDeletePhoto = async (photo: Photo, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (deletingPhoto) return
+
+    if (!confirm('Are you sure you want to delete this photo?')) return
+
+    setDeletingPhoto(photo.id)
+    try {
+      // Extract storage path from URL
+      const match = photo.photo_url.match(/\/photos\/(.+)$/)
+      const storagePath = match ? match[1] : null
+
+      // Delete from storage
+      if (storagePath) {
+        await supabase.storage.from('photos').remove([storagePath])
+      }
+
+      // Delete from database
+      const { error } = await supabase
+        .from('photos')
+        .delete()
+        .eq('id', photo.id)
+
+      if (error) throw error
+
+      // Update local state
+      setAllPhotos(prev => prev.filter(p => p.id !== photo.id))
+    } catch (err) {
+      console.error('Delete error:', err)
+      alert('Failed to delete photo. Please try again.')
+    } finally {
+      setDeletingPhoto(null)
+    }
+  }
+
+  const handleDownloadPhoto = async (photo: Photo, e: React.MouseEvent) => {
+    e.stopPropagation()
+    try {
+      const response = await fetch(photo.photo_url)
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `photo-${new Date(photo.captured_at).toISOString().split('T')[0]}.jpg`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error('Download error:', err)
+      alert('Failed to download photo.')
+    }
+  }
+
   const handleNodeClick = useCallback((member: Member) => {
     setSelectedMember(member)
   }, [])
@@ -200,14 +319,37 @@ function App() {
           {/* Sidebar Header */}
           <div className="flex items-center justify-between p-4 border-b border-red-900/50">
             <h2 className="text-yellow-400 font-semibold text-lg">Photo Gallery</h2>
-            <button
-              onClick={() => setIsGalleryOpen(false)}
-              className="text-yellow-400/70 hover:text-yellow-400 transition"
-            >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
+            <div className="flex items-center gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleFileUpload}
+                className="hidden"
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadingPhoto}
+                className="text-yellow-400/70 hover:text-yellow-400 transition disabled:opacity-50"
+                title="Upload photo"
+              >
+                {uploadingPhoto ? (
+                  <div className="w-6 h-6 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                  </svg>
+                )}
+              </button>
+              <button
+                onClick={() => setIsGalleryOpen(false)}
+                className="text-yellow-400/70 hover:text-yellow-400 transition"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
           </div>
 
           {/* Photos Grid */}
@@ -236,6 +378,31 @@ function App() {
                       alt={`Photo from ${new Date(photo.captured_at).toLocaleDateString()}`}
                       className="w-full aspect-square object-cover rounded-lg transition-transform group-hover:scale-[1.02]"
                     />
+                    {/* Delete button - top left */}
+                    <button
+                      onClick={(e) => handleDeletePhoto(photo, e)}
+                      disabled={deletingPhoto === photo.id}
+                      className="absolute top-1 left-1 w-6 h-6 bg-red-500 hover:bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center shadow-md disabled:opacity-50"
+                      title="Delete photo"
+                    >
+                      {deletingPhoto === photo.id ? (
+                        <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      )}
+                    </button>
+                    {/* Download button - top right */}
+                    <button
+                      onClick={(e) => handleDownloadPhoto(photo, e)}
+                      className="absolute top-1 right-1 w-6 h-6 bg-blue-500 hover:bg-blue-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center shadow-md"
+                      title="Download photo"
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                      </svg>
+                    </button>
                     <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-xs p-1 rounded-b-lg">
                       {new Date(photo.captured_at).toLocaleDateString('vi-VN')}
                     </div>
